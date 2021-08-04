@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use eetf::Term;
+use eetf::{Term, Tuple};
 use md5::{Digest, Md5};
 use rand::Rng;
 use std::{convert::TryFrom, ops::Not, sync::Arc, time::Duration};
@@ -261,6 +261,15 @@ impl<R: AsyncRead + Send + Unpin, W: AsyncWrite + Send + Unpin + 'static> EdnCon
     }
   }
 
+  async fn dispatch_reg_send(pool: Arc<EdnPool>, control: Tuple, message: Term) -> Result<()> {
+    let from_pid = project_term!(control.elements.term_index(1)?, Pid)?;
+    let to_name = project_term!(control.elements.term_index(3)?, Atom)?;
+    pool
+      .service()
+      .on_reg_send(&pool, from_pid, to_name, message)
+      .await
+  }
+
   pub(crate) async fn dispatch_loop(&mut self, pool: Arc<EdnPool>) -> Result<Never> {
     let (stream_w, rx) = self
       .stream_w
@@ -275,22 +284,21 @@ impl<R: AsyncRead + Send + Unpin, W: AsyncWrite + Send + Unpin + 'static> EdnCon
       let (control, message) = self.receive_message().await?;
       log::debug!("control: {:?}", control);
 
-      let tuple = project_term!(&control, Tuple)?;
-      let op_type = project_term!(tuple.elements.term_index(0)?, FixInteger)?.value;
+      let control = project_term!(control, Tuple)?;
+      let op_type = project_term!(control.elements.term_index(0)?, FixInteger)?.value;
       match op_type {
         6 => {
           // REG_SEND
-          let from_pid = project_term!(tuple.elements.term_index(1)?, Pid)?;
-          let to_name = project_term!(tuple.elements.term_index(3)?, Atom)?;
-          pool
-            .service()
-            .on_reg_send(
-              &pool,
-              from_pid,
-              to_name,
-              message.ok_or_else(|| ProtocolError)?,
-            )
-            .await?;
+          let pool = pool.clone();
+          let message = message.ok_or_else(|| ProtocolError)?;
+          tokio::spawn(async move {
+            match Self::dispatch_reg_send(pool, control, message).await {
+              Ok(()) => {}
+              Err(e) => {
+                log::error!("dispatch_reg_send error: {:?}", e);
+              }
+            }
+          });
         }
         _ => {
           log::warn!("ignoring unknown operation: {}", op_type);

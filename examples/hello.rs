@@ -41,6 +41,7 @@ async fn main() -> Result<()> {
 
   let server_opt = EdnServerOpt::builder()
     .node_name("edp-hello".into())
+    .listen_addr("0.0.0.0:0".into())
     .service(Box::new(Service {}))
     .build();
   let mut server = EdnServer::start(server_opt).await?;
