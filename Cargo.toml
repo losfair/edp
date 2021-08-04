@@ -1,0 +1,29 @@
+[package]
+name = "edp"
+version = "0.1.0"
+edition = "2018"
+description = "Erlang Distribution Protocol implementation in Rust."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+debug = true
+
+[dependencies]
+eetf = { path = "../eetf" }
+anyhow = "1"
+thiserror = "1"
+byteorder = "1"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+typed-builder = "0.9"
+log = "0.4"
+pretty_env_logger = "0.4"
+bitflags = "1"
+md-5 = "0.9"
+rand = "0.8"
+dirs = "3"
+hex = "0.4"
+hostname = "0.3"
+async-trait = "0.1"
+parking_lot = "0.11"
