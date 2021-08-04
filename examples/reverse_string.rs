@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
   pretty_env_logger::init_timed();
 
   let server_opt = EdnServerOpt::builder()
-    .node_name("edp-hello".into())
+    .node_name("edp-example-reverse-string".into())
     .listen_addr("0.0.0.0:0".into())
     .service(Box::new(Service {}))
     .build();
