@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::net::{lookup_host, TcpListener, TcpStream};
+use tokio::{
+  net::{lookup_host, TcpListener, TcpStream},
+  sync::oneshot,
+};
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -33,7 +36,7 @@ pub struct EdnServerOpt {
 }
 
 pub struct EdnServer {
-  _epmd_client: EpmdClient<TcpStream>,
+  epmd_client: EpmdClient<TcpStream>,
   listener: TcpListener,
   creation: u32,
   cookie: String,
@@ -87,7 +90,7 @@ impl EdnServer {
     };
 
     Ok(Self {
-      _epmd_client: epmd_client,
+      epmd_client,
       listener,
       creation,
       cookie,
@@ -99,9 +102,26 @@ impl EdnServer {
     })
   }
 
-  pub async fn run(&mut self) -> Result<Never> {
+  pub async fn run(self) -> Result<Never> {
+    let (_close_tx, close_rx) = oneshot::channel::<()>();
+    let (epmd_error_tx, mut epmd_error_rx) = oneshot::channel();
+    let mut epmd = self.epmd_client;
+    tokio::spawn(async move {
+      tokio::select! {
+        res = epmd.monitor_connection() => {
+          let _ = epmd_error_tx.send(match res {
+            Ok(x) => match x {},
+            Err(e) => e,
+          });
+        }
+        _ = close_rx => {}
+      }
+    });
     loop {
-      let (conn, _) = self.listener.accept().await?;
+      let (conn, _) = tokio::select! {
+        x = self.listener.accept() => x?,
+        e = &mut epmd_error_rx => return Err(e?),
+      };
       let (conn_r, conn_w) = conn.into_split();
       let (mut edn_conn, tx) = EdnConnection::new(
         conn_r,
