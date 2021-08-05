@@ -40,8 +40,6 @@ pub struct EdnServer {
   listener: TcpListener,
   creation: u32,
   cookie: String,
-  node_name: String,
-  hostname: String,
   pool: Arc<EdnPool>,
   send_buffer_size: usize,
   recv_buffer_size: usize,
@@ -74,7 +72,6 @@ impl EdnServer {
       .build();
 
     let creation = epmd_client.register_node(&reg).await?;
-    log::info!("registered node at {}", actual_addr);
 
     let hostname = hostname::get().map(|x| x.to_string_lossy().into_owned())?;
     let pool = EdnPool::new(
@@ -82,6 +79,7 @@ impl EdnServer {
       creation,
       opt.service,
     );
+    log::info!("node {} listening on {}", pool.full_name(), actual_addr);
 
     let cookie = if let Some(x) = opt.cookie {
       x
@@ -94,8 +92,6 @@ impl EdnServer {
       listener,
       creation,
       cookie,
-      node_name: opt.node_name,
-      hostname,
       pool,
       send_buffer_size: opt.send_buffer_size,
       recv_buffer_size: opt.recv_buffer_size,
@@ -127,7 +123,7 @@ impl EdnServer {
         conn_r,
         conn_w,
         EdnConnectionOpt::builder()
-          .name(format!("{}@{}", self.node_name, self.hostname,))
+          .name(self.pool.full_name().to_string())
           .cookie(self.cookie.clone())
           .creation(self.creation)
           .send_buffer_size(self.send_buffer_size)

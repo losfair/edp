@@ -71,6 +71,10 @@ impl EdnPool {
     &*self.service
   }
 
+  pub fn full_name(&self) -> &str {
+    &self.node_fullname
+  }
+
   pub(crate) fn register_dispatch(
     self: &Arc<Self>,
     key: String,
