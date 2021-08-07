@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::net::{lookup_host, TcpListener, TcpStream};
+use tokio::{
+  net::{lookup_host, TcpListener, TcpStream},
+  sync::oneshot,
+};
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -33,12 +36,10 @@ pub struct EdnServerOpt {
 }
 
 pub struct EdnServer {
-  _epmd_client: EpmdClient<TcpStream>,
+  epmd_client: EpmdClient<TcpStream>,
   listener: TcpListener,
   creation: u32,
   cookie: String,
-  node_name: String,
-  hostname: String,
   pool: Arc<EdnPool>,
   send_buffer_size: usize,
   recv_buffer_size: usize,
@@ -71,7 +72,6 @@ impl EdnServer {
       .build();
 
     let creation = epmd_client.register_node(&reg).await?;
-    log::info!("registered node at {}", actual_addr);
 
     let hostname = hostname::get().map(|x| x.to_string_lossy().into_owned())?;
     let pool = EdnPool::new(
@@ -79,6 +79,7 @@ impl EdnServer {
       creation,
       opt.service,
     );
+    log::info!("node {} listening on {}", pool.full_name(), actual_addr);
 
     let cookie = if let Some(x) = opt.cookie {
       x
@@ -87,27 +88,42 @@ impl EdnServer {
     };
 
     Ok(Self {
-      _epmd_client: epmd_client,
+      epmd_client,
       listener,
       creation,
       cookie,
-      node_name: opt.node_name,
-      hostname,
       pool,
       send_buffer_size: opt.send_buffer_size,
       recv_buffer_size: opt.recv_buffer_size,
     })
   }
 
-  pub async fn run(&mut self) -> Result<Never> {
+  pub async fn run(self) -> Result<Never> {
+    let (_close_tx, close_rx) = oneshot::channel::<()>();
+    let (epmd_error_tx, mut epmd_error_rx) = oneshot::channel();
+    let mut epmd = self.epmd_client;
+    tokio::spawn(async move {
+      tokio::select! {
+        res = epmd.monitor_connection() => {
+          let _ = epmd_error_tx.send(match res {
+            Ok(x) => match x {},
+            Err(e) => e,
+          });
+        }
+        _ = close_rx => {}
+      }
+    });
     loop {
-      let (conn, _) = self.listener.accept().await?;
+      let (conn, _) = tokio::select! {
+        x = self.listener.accept() => x?,
+        e = &mut epmd_error_rx => return Err(e?),
+      };
       let (conn_r, conn_w) = conn.into_split();
       let (mut edn_conn, tx) = EdnConnection::new(
         conn_r,
         conn_w,
         EdnConnectionOpt::builder()
-          .name(format!("{}@{}", self.node_name, self.hostname,))
+          .name(self.pool.full_name().to_string())
           .cookie(self.cookie.clone())
           .creation(self.creation)
           .send_buffer_size(self.send_buffer_size)

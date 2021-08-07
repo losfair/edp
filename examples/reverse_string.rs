@@ -44,6 +44,6 @@ async fn main() -> Result<()> {
     .listen_addr("0.0.0.0:0".into())
     .service(Box::new(Service {}))
     .build();
-  let mut server = EdnServer::start(server_opt).await?;
+  let server = EdnServer::start(server_opt).await?;
   match server.run().await? {}
 }

@@ -7,7 +7,7 @@ use tokio::{
 };
 use typed_builder::TypedBuilder;
 
-use crate::protocol::ProtocolError;
+use crate::{protocol::ProtocolError, Never};
 
 pub const NODE_TYPE_NORMAL: u8 = 77;
 pub const NODE_TYPE_HIDDEN: u8 = 72;
@@ -16,6 +16,9 @@ pub const NODE_TYPE_HIDDEN: u8 = 72;
 pub enum EpmdClientError {
   #[error("registration failed")]
   RegistrationFailed,
+
+  #[error("lost connection to epmd")]
+  LostConnection,
 }
 
 pub struct EpmdClient<S> {
@@ -56,6 +59,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> EpmdClient<S> {
     Self {
       stream: BufReader::new(stream),
     }
+  }
+
+  pub async fn monitor_connection(&mut self) -> Result<Never> {
+    let _ = self
+      .stream
+      .read_u8()
+      .await
+      .map_err(|_| EpmdClientError::LostConnection)?;
+    Err(ProtocolError.into())
   }
 
   /// https://erlang.org/doc/apps/erts/erl_dist_protocol.html#register-a-node-in-epmd
