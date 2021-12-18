@@ -10,7 +10,7 @@ description = "Erlang Distribution Protocol implementation in Rust."
 debug = true
 
 [dependencies]
-eetf = { git = "https://github.com/losfair/eetf", rev = "3cbbf59216632986f96373266550b6c95060a761" }
+eetf = "0.6"
 anyhow = "1"
 thiserror = "1"
 byteorder = "1"
