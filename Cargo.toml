@@ -3,6 +3,8 @@ name = "edp"
 version = "0.1.0"
 edition = "2018"
 description = "Erlang Distribution Protocol implementation in Rust."
+license = "MIT"
+authors = ["Heyang Zhou <heyang.zhou@icloud.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
